@@ -1,0 +1,22 @@
+[
+  {
+    "name": "hf-chat",
+    "value": "your-cookie-value-here",
+    "domain": ".huggingface.co",
+    "path": "/",
+    "expires": 1234567890,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "token",
+    "value": "your-token-value-here",
+    "domain": ".huggingface.co",
+    "path": "/",
+    "expires": 1234567890,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  }
+]

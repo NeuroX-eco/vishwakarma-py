@@ -1,0 +1,35 @@
+# Vishwakarma AI - Requirements
+# © 2025 Vishwakarma Industries
+
+# Core Framework
+eel==0.16.0
+
+# Speech & Audio
+pyttsx3==2.90
+SpeechRecognition==3.10.0
+pyaudio==0.2.13
+playsound==1.2.2
+
+# Computer Vision & Face Recognition
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+numpy==1.24.3
+Pillow==10.0.0
+
+# Wake Word Detection (Optional - Removed for simplicity)
+# pvporcupine==2.2.0
+
+# AI & Chatbot
+openai>=1.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Automation
+pywhatkit==5.4
+pyautogui==0.9.54
+
+# Database
+# SQLite3 is included with Python
+
+# Additional Dependencies
+requests==2.31.0

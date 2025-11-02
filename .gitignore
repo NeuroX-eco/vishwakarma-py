@@ -1,0 +1,45 @@
+# Vishwakarma AI - Git Ignore
+# © 2025 Vishwakarma Industries
+
+# Virtual Environment
+/envvishwakarma
+/envjarvis
+venv/
+env/
+
+# Database Files
+vishwakarma.db
+jarvis.db
+*.db
+
+# Data Files
+contacts.csv
+/engine/cookies.json
+
+# Python Cache
+__pycache__/
+/engine/__pycache__
+/engine/auth/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Face Recognition Data
+/engine/auth/samples/*
+/engine/auth/trainer/*.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
