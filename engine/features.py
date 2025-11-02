@@ -1,282 +1,327 @@
 """
 Vishwakarma AI - Core Features Module
 © 2025 Vishwakarma Industries
+
+This module contains the core features of the Vishwakarma AI assistant.
 """
 
 import os
-from pipes import quote
-import re
 import sqlite3
-import struct
 import subprocess
 import time
 import webbrowser
-from playsound import playsound
+from pipes import quote
+from datetime import datetime
+
 import eel
-import pyaudio
 import pyautogui
-from engine.command import speak
-from engine.config import ASSISTANT_NAME
-# Playing assistant sound function
 import pywhatkit as kit
+from openai import OpenAI
+from playsound import playsound
 
-from engine.helper import extract_yt_term, remove_words
-from hugchat import hugchat
+from engine.command import speak
+from engine.config import ASSISTANT_NAME, NVIDIA_API_KEY, NVIDIA_MODEL
+from engine.helper import (adbInput, extract_yt_term, goback, keyEvent,
+                           remove_words, replace_spaces_with_percent_s,
+                           tapEvents)
 
-con = sqlite3.connect("vishwakarma.db")
-cursor = con.cursor()
+# Database connection
+try:
+    con = sqlite3.connect("vishwakarma.db")
+    cursor = con.cursor()
+except sqlite3.Error as e:
+    print(f"Database connection error: {e}")
+    # Handle the error gracefully, maybe by disabling database-dependent features
+    con = None
+    cursor = None
 
 @eel.expose
 def playAssistantSound():
+    """Plays the assistant's startup sound."""
     music_dir = "www\\assets\\audio\\start_sound.mp3"
-    playsound(music_dir)
+    try:
+        playsound(music_dir)
+    except Exception as e:
+        print(f"Error playing sound: {e}")
 
-    
 def openCommand(query):
-    query = query.replace(ASSISTANT_NAME, "")
-    query = query.replace("open", "")
-    query = query.lower()
+    """
+    Opens applications, websites, or system commands based on the query.
 
-    app_name = query.strip()
+    Args:
+        query (str): The user's command.
+    """
+    app_name = query.replace(ASSISTANT_NAME, "").replace("open", "").strip().lower()
 
-    if app_name != "":
-        try:
-            cursor.execute(
-                'SELECT path FROM sys_command WHERE name IN (?)', (app_name,))
-            results = cursor.fetchall()
+    if not app_name:
+        speak("Please specify what to open.")
+        return
 
-            if len(results) != 0:
-                speak("Opening "+query)
-                os.startfile(results[0][0])
+    if not cursor:
+        speak("Database not connected. Cannot open commands.")
+        return
 
-            elif len(results) == 0: 
-                cursor.execute(
-                'SELECT url FROM web_command WHERE name IN (?)', (app_name,))
-                results = cursor.fetchall()
-                
-                if len(results) != 0:
-                    speak("Opening "+query)
-                    webbrowser.open(results[0][0])
+    try:
+        # Check for system commands
+        cursor.execute('SELECT path FROM sys_command WHERE LOWER(name) = ?', (app_name,))
+        sys_results = cursor.fetchall()
+        if sys_results:
+            speak(f"Opening {app_name}")
+            os.startfile(sys_results[0][0])
+            return
 
-                else:
-                    speak("Opening "+query)
-                    try:
-                        os.system('start '+query)
-                    except Exception as e:
-                        print(f"Error opening {query}: {e}")
-                        speak("Application not found")
-        except Exception as e:
-            print(f"Error in openCommand: {e}")
-            speak("Something went wrong while opening the application")
+        # Check for web commands
+        cursor.execute('SELECT url FROM web_command WHERE LOWER(name) = ?', (app_name,))
+        web_results = cursor.fetchall()
+        if web_results:
+            speak(f"Opening {app_name}")
+            webbrowser.open(web_results[0][0])
+            return
 
-       
+        # Fallback to system command
+        speak(f"Opening {app_name}")
+        os.system(f'start {app_name}')
+
+    except Exception as e:
+        print(f"Error in openCommand: {e}")
+        speak(f"Sorry, I couldn't open {app_name}. Application not found.")
+
 
 def PlayYoutube(query):
+    """
+    Plays a YouTube video based on the query.
+
+    Args:
+        query (str): The user's command.
+    """
     search_term = extract_yt_term(query)
-    speak("Playing "+search_term+" on YouTube")
+    speak(f"Playing {search_term} on YouTube")
     kit.playonyt(search_term)
 
 
-# find contacts
 def findContact(query):
-    
-    words_to_remove = [ASSISTANT_NAME, 'make', 'a', 'to', 'phone', 'call', 'send', 'message', 'wahtsapp', 'video']
-    query = remove_words(query, words_to_remove)
+    """
+    Finds a contact in the database.
+
+    Args:
+        query (str): The name of the contact to find.
+
+    Returns:
+        tuple: A tuple containing the mobile number and the contact's name,
+               or (None, None) if not found.
+    """
+    words_to_remove = [ASSISTANT_NAME, 'make', 'a', 'to', 'phone', 'call', 'send', 'message', 'whatsapp', 'video']
+    contact_name = remove_words(query, words_to_remove).strip().lower()
+
+    if not cursor:
+        speak("Database not connected. Cannot find contacts.")
+        return None, None
 
     try:
-        query = query.strip().lower()
-        cursor.execute("SELECT mobile_no FROM contacts WHERE LOWER(name) LIKE ? OR LOWER(name) LIKE ?", ('%' + query + '%', query + '%'))
+        cursor.execute("SELECT mobile_no FROM contacts WHERE LOWER(name) LIKE ?", (f'%{contact_name}%',))
         results = cursor.fetchall()
-        
-        if len(results) == 0:
-            speak('Contact not found in your list')
-            return 0, 0
-            
-        print(results[0][0])
+
+        if not results:
+            speak('Contact not found in your list.')
+            return None, None
+
         mobile_number_str = str(results[0][0])
-
         if not mobile_number_str.startswith('+91'):
-            mobile_number_str = '+91' + mobile_number_str
+            mobile_number_str = f'+91{mobile_number_str}'
 
-        return mobile_number_str, query
+        return mobile_number_str, contact_name
     except Exception as e:
         print(f"Error finding contact: {e}")
-        speak('Error accessing contacts')
-        return 0, 0
-    
+        speak('Error accessing contacts.')
+        return None, None
+
+
 def whatsApp(mobile_no, message, flag, name):
-    
+    """
+    Sends a WhatsApp message, or initiates a voice or video call.
 
-    if flag == 'message':
-        target_tab = 12
-        jarvis_message = "message send successfully to "+name
+    Args:
+        mobile_no (str): The recipient's mobile number.
+        message (str): The message to send.
+        flag (str): The action to perform ('message', 'call', or 'video_call').
+        name (str): The name of the contact.
+    """
+    actions = {
+        'message': {'tab': 12, 'message': f"Message sent successfully to {name}"},
+        'call': {'tab': 7, 'message': f"Calling {name}"},
+        'video_call': {'tab': 6, 'message': f"Starting video call with {name}"}
+    }
 
-    elif flag == 'call':
-        target_tab = 7
-        message = ''
-        jarvis_message = "calling to "+name
+    action = actions.get(flag)
+    if not action:
+        speak("Invalid WhatsApp action.")
+        return
 
-    else:
-        target_tab = 6
-        message = ''
-        jarvis_message = "staring video call with "+name
-
-
-    # Encode the message for URL
-    encoded_message = quote(message)
-    print(encoded_message)
-    # Construct the URL
+    encoded_message = quote(message if flag == 'message' else "")
     whatsapp_url = f"whatsapp://send?phone={mobile_no}&text={encoded_message}"
-
-    # Construct the full command
     full_command = f'start "" "{whatsapp_url}"'
 
-    # Open WhatsApp with the constructed URL using cmd.exe
-    subprocess.run(full_command, shell=True)
-    time.sleep(5)
-    subprocess.run(full_command, shell=True)
-    
-    pyautogui.hotkey('ctrl', 'f')
-
-    for i in range(1, target_tab):
-        pyautogui.hotkey('tab')
-
-    pyautogui.hotkey('enter')
-    speak(jarvis_message)
-
-# NVIDIA AI Chatbot
-def chatBot(query):
-    """AI chatbot using NVIDIA API with comprehensive error handling"""
     try:
-        user_input = query.strip()
-        if not user_input:
-            speak("I didn't catch that. Could you please repeat?")
-            return
-        
-        # Check if API key is available
-        from engine.config import NVIDIA_API_KEY, NVIDIA_MODEL
-        
-        if not NVIDIA_API_KEY:
-            print("NVIDIA API key not configured. Using fallback chatbot.")
-            return fallback_chatbot(query)
-        
-        # Use NVIDIA API for AI responses
-        from openai import OpenAI
-        
+        subprocess.run(full_command, shell=True, check=True)
+        time.sleep(5)
+        pyautogui.hotkey('ctrl', 'f')
+        for _ in range(action['tab']):
+            pyautogui.hotkey('tab')
+        pyautogui.hotkey('enter')
+        speak(action['message'])
+    except subprocess.CalledProcessError as e:
+        print(f"Error opening WhatsApp: {e}")
+        speak("Failed to open WhatsApp.")
+    except Exception as e:
+        print(f"An unexpected error occurred in whatsApp: {e}")
+        speak("An unexpected error occurred.")
+
+
+def chatBot(query):
+    """
+    AI chatbot using NVIDIA API with comprehensive error handling.
+
+    Args:
+        query (str): The user's input.
+
+    Returns:
+        str: The chatbot's response.
+    """
+    user_input = query.strip()
+    if not user_input:
+        speak("I didn't catch that. Could you please repeat?")
+        return
+
+    if not NVIDIA_API_KEY:
+        print("NVIDIA API key not configured. Using fallback chatbot.")
+        return fallback_chatbot(user_input)
+
+    try:
         client = OpenAI(
             base_url="https://integrate.api.nvidia.com/v1",
             api_key=NVIDIA_API_KEY
         )
-        
+
         print(f"Sending to NVIDIA AI: {user_input}")
-        
+
         completion = client.chat.completions.create(
             model=NVIDIA_MODEL,
             messages=[
                 {
                     "role": "system",
-                    "content": "You are Vishwakarma AI, an intelligent voice assistant created by Vishwakarma Industries. You are helpful, friendly, and provide concise responses suitable for voice interaction. Keep responses brief and conversational."
+                    "content": "You are Vishwakarma AI, an intelligent voice assistant. Keep responses brief and conversational."
                 },
-                {
-                    "role": "user",
-                    "content": user_input
-                }
+                {"role": "user", "content": user_input}
             ],
             temperature=0.7,
             top_p=0.9,
-            max_tokens=200,  # Keep responses concise for voice
+            max_tokens=200,
             stream=False
         )
-        
+
         response = completion.choices[0].message.content
         print(f"NVIDIA AI response: {response}")
         speak(response)
         return response
-        
-    except ImportError as e:
-        print(f"OpenAI library not installed: {e}")
-        print("Install with: pip install openai")
-        return fallback_chatbot(query)
+
     except Exception as e:
         error_msg = str(e).lower()
-        
         if "401" in error_msg or "unauthorized" in error_msg:
             print("NVIDIA API Error: Invalid API key (401 Unauthorized)")
-            print("Please check your NVIDIA_API_KEY in the .env file")
         elif "429" in error_msg or "rate limit" in error_msg:
             print("NVIDIA API Error: Rate limit exceeded (429)")
-            print("Please wait a moment before trying again")
-        elif "timeout" in error_msg:
-            print("NVIDIA API Error: Request timeout")
-            print("Please check your internet connection")
-        elif "connection" in error_msg:
-            print("NVIDIA API Error: Connection failed")
-            print("Please check your internet connection")
+        elif any(err in error_msg for err in ["timeout", "connection"]):
+            print("NVIDIA API Error: Network issue")
         else:
             print(f"NVIDIA API error: {e}")
-        
-        return fallback_chatbot(query)
+
+        return fallback_chatbot(user_input)
+
 
 def fallback_chatbot(query):
-    """Fallback responses when API is unavailable"""
+    """
+    Fallback responses when the API is unavailable.
+
+    Args:
+        query (str): The user's input.
+
+    Returns:
+        str: The fallback response.
+    """
     query = query.lower()
     
-    greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening']
-    if any(word in query for word in greetings):
-        response = "Hello! How can I assist you today?"
-    elif 'how are you' in query:
-        response = "I'm functioning well, thank you for asking! How can I help you?"
-    elif 'your name' in query or 'who are you' in query:
-        response = "I am Vishwakarma AI, your intelligent voice assistant created by Vishwakarma Industries."
-    elif 'time' in query:
-        from datetime import datetime
-        current_time = datetime.now().strftime("%I:%M %p")
-        response = f"The current time is {current_time}"
-    elif 'date' in query:
-        from datetime import datetime
-        current_date = datetime.now().strftime("%B %d, %Y")
-        response = f"Today is {current_date}"
-    elif 'thank' in query:
-        response = "You're welcome! Happy to help."
-    elif 'bye' in query or 'goodbye' in query:
-        response = "Goodbye! Have a great day!"
-    else:
-        response = "I understand. How else can I assist you?"
-    
-    print(f"Fallback response: {response}")
-    speak(response)
-    return response
+    responses = {
+        'hello': "Hello! How can I assist you today?",
+        'hi': "Hello! How can I assist you today?",
+        'hey': "Hello! How can I assist you today?",
+        'how are you': "I'm functioning well, thank you for asking! How can I help you?",
+        'your name': "I am Vishwakarma AI, your intelligent voice assistant.",
+        'who are you': "I am Vishwakarma AI, your intelligent voice assistant.",
+        'time': f"The current time is {datetime.now().strftime('%I:%M %p')}",
+        'date': f"Today is {datetime.now().strftime('%B %d, %Y')}",
+        'thank': "You're welcome! Happy to help.",
+        'bye': "Goodbye! Have a great day!",
+        'goodbye': "Goodbye! Have a great day!"
+    }
 
-# android automation
+    for keyword, response in responses.items():
+        if keyword in query:
+            print(f"Fallback response: {response}")
+            speak(response)
+            return response
+
+    default_response = "I understand. How else can I assist you?"
+    print(f"Fallback response: {default_response}")
+    speak(default_response)
+    return default_response
+
 
 def makeCall(name, mobileNo):
-    mobileNo =mobileNo.replace(" ", "")
-    speak("Calling "+name)
-    command = 'adb shell am start -a android.intent.action.CALL -d tel:'+mobileNo
+    """
+    Makes a phone call using ADB.
+
+    Args:
+        name (str): The name of the person to call.
+        mobileNo (str): The mobile number to call.
+    """
+    mobileNo_clean = mobileNo.replace(" ", "")
+    speak(f"Calling {name}")
+    command = f'adb shell am start -a android.intent.action.CALL -d tel:{mobileNo_clean}'
     os.system(command)
 
 
-# to send message
 def sendMessage(message, mobileNo, name):
-    from engine.helper import replace_spaces_with_percent_s, goback, keyEvent, tapEvents, adbInput
-    message = replace_spaces_with_percent_s(message)
-    mobileNo = replace_spaces_with_percent_s(mobileNo)
-    speak("sending message")
-    goback(4)
-    time.sleep(1)
-    keyEvent(3)
-    # open sms app
-    tapEvents(136, 2220)
-    #start chat
-    tapEvents(819, 2192)
-    # search mobile no
-    adbInput(mobileNo)
-    #tap on name
-    tapEvents(601, 574)
-    # tap on input
-    tapEvents(390, 2270)
-    #message
-    adbInput(message)
-    #send
-    tapEvents(957, 1397)
-    speak("message send successfully to "+name)
+    """
+    Sends an SMS message using ADB.
+
+    Args:
+        message (str): The message to send.
+        mobileNo (str): The recipient's mobile number.
+        name (str): The recipient's name.
+    """
+    message_formatted = replace_spaces_with_percent_s(message)
+    mobileNo_formatted = replace_spaces_with_percent_s(mobileNo)
+    speak("Sending message")
+
+    try:
+        goback(4)
+        time.sleep(1)
+        keyEvent(3)
+        # Open SMS app
+        tapEvents(136, 2220)
+        # Start chat
+        tapEvents(819, 2192)
+        # Search mobile no
+        adbInput(mobileNo_formatted)
+        # Tap on name
+        tapEvents(601, 574)
+        # Tap on input
+        tapEvents(390, 2270)
+        # Message
+        adbInput(message_formatted)
+        # Send
+        tapEvents(957, 1397)
+        speak(f"Message sent successfully to {name}")
+    except Exception as e:
+        print(f"Error sending message via ADB: {e}")
+        speak("Failed to send the message.")

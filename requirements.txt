@@ -7,13 +7,11 @@ eel==0.16.0
 # Speech & Audio
 pyttsx3==2.90
 SpeechRecognition==3.10.0
-pyaudio==0.2.13
 playsound==1.2.2
 
 # Computer Vision & Face Recognition
 opencv-python==4.8.1.78
 opencv-contrib-python==4.8.1.78
-numpy==1.24.3
 Pillow==10.0.0
 
 # Wake Word Detection (Optional - Removed for simplicity)

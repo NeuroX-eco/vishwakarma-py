@@ -4,46 +4,81 @@ Vishwakarma AI - Face Sample Capture Module
 
 This module captures face samples for training the face recognition model.
 """
-
 import cv2
+import os
+from engine.config import CASCADE_PATH, SAMPLES_PATH
 
-cam = cv2.VideoCapture(0, cv2.CAP_DSHOW) #create a video capture object which is helpful to capture videos through webcam
-cam.set(3, 640) # set video FrameWidth
-cam.set(4, 480) # set video FrameHeight
+# Constants
+SAMPLE_COUNT = 100
 
+class FaceSampleCollector:
+    """
+    Handles the collection of face samples for training.
+    """
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.detector = cv2.CascadeClassifier(CASCADE_PATH)
+        self.cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cam.set(3, 640)
+        self.cam.set(4, 480)
 
-detector = cv2.CascadeClassifier('engine\\auth\\haarcascade_frontalface_default.xml')
-#Haar Cascade classifier is an effective object detection approach
+        if not os.path.exists(SAMPLES_PATH):
+            os.makedirs(SAMPLES_PATH)
 
-face_id = input("Enter a Numeric user ID  here:  ")
-#Use integer ID for every new face (0,1,2,3,4,5,6,7,8,9........)
+    def collect_samples(self):
+        """
+        Starts the process of collecting face samples.
+        """
+        print("Taking samples, look at the camera...")
+        count = 0
+        while True:
+            ret, img = self.cam.read()
+            if not ret:
+                print("Failed to grab frame")
+                break
 
-print("Taking samples, look at camera ....... ")
-count = 0 # Initializing sampling face count
+            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            faces = self.detector.detectMultiScale(gray_img, 1.3, 5)
 
-while True:
+            if self._process_faces(img, gray_img, faces, count):
+                count += 1
 
-    ret, img = cam.read() #read the frames using the above created object
-    converted_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) #The function converts an input image from one color space to another
-    faces = detector.detectMultiScale(converted_image, 1.3, 5)
+            cv2.imshow('image', img)
+            if cv2.waitKey(100) & 0xFF == 27 or count >= SAMPLE_COUNT:
+                break
 
-    for (x,y,w,h) in faces:
+        print("Samples taken. Closing the program.")
+        self.cam.release()
+        cv2.destroyAllWindows()
 
-        cv2.rectangle(img, (x,y), (x+w,y+h), (255,0,0), 2) #used to draw a rectangle on any image
-        count += 1
+    def _process_faces(self, img, gray_img, faces, count):
+        """
+        Processes detected faces and saves the samples.
 
-        
-        cv2.imwrite("engine\\auth\\samples\\face." + str(face_id) + '.' + str(count) + ".jpg", converted_image[y:y+h,x:x+w])
-        # To capture & Save images into the datasets folder
+        Args:
+            img (numpy.ndarray): The original image.
+            gray_img (numpy.ndarray): The grayscale image.
+            faces (list): A list of detected faces.
+            count (int): The current sample count.
 
-        cv2.imshow('image', img) #Used to display an image in a window
+        Returns:
+            bool: True if a sample was saved, False otherwise.
+        """
+        sample_saved = False
+        for (x, y, w, h) in faces:
+            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            sample_path = os.path.join(SAMPLES_PATH, f"face.{self.user_id}.{count + 1}.jpg")
+            cv2.imwrite(sample_path, gray_img[y:y+h, x:x+w])
+            sample_saved = True
+        return sample_saved
 
-    k = cv2.waitKey(100) & 0xff # Waits for a pressed key
-    if k == 27: # Press 'ESC' to stop
-        break
-    elif count >= 100: # Take 50 sample (More sample --> More accuracy)
-         break
-
-print("Samples taken now closing the program....")
-cam.release()
-cv2.destroyAllWindows()
+if __name__ == '__main__':
+    try:
+        user_id = input("Enter a Numeric user ID: ")
+        if not user_id.isdigit():
+            print("Invalid user ID. Please enter a numeric value.")
+        else:
+            collector = FaceSampleCollector(user_id)
+            collector.collect_samples()
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
