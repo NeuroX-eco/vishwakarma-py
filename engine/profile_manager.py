@@ -10,10 +10,12 @@ import json
 from datetime import datetime
 
 
+from engine.config import DATABASE_NAME
+
 class ProfileManager:
     """Manages user profiles and preferences"""
     
-    def __init__(self, db_name="vishwakarma.db"):
+    def __init__(self, db_name=DATABASE_NAME):
         self.db_name = db_name
         self.init_database()
     

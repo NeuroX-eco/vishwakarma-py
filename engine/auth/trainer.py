@@ -4,44 +4,72 @@ Vishwakarma AI - Face Recognition Trainer Module
 
 This module trains the face recognition model using captured samples.
 """
-
 import cv2
 import numpy as np
-from PIL import Image #pillow package
+from PIL import Image
 import os
 
-path = 'engine\\auth\\samples' # Path for samples already taken
+from engine.config import SAMPLES_PATH, TRAINER_PATH, TRAINER_FILE, CASCADE_PATH
 
-recognizer = cv2.face.LBPHFaceRecognizer_create() # Local Binary Patterns Histograms
-detector = cv2.CascadeClassifier("engine\\auth\\haarcascade_frontalface_default.xml")
-#Haar Cascade classifier is an effective object detection approach
+class FaceTrainer:
+    """
+    Handles the training of the face recognition model.
+    """
+    def __init__(self):
+        self.recognizer = cv2.face.LBPHFaceRecognizer_create()
+        self.detector = cv2.CascadeClassifier(CASCADE_PATH)
 
+        if not os.path.exists(SAMPLES_PATH):
+            raise FileNotFoundError(f"Samples directory not found at {SAMPLES_PATH}. Please collect samples first.")
+        if not os.path.exists(TRAINER_PATH):
+            os.makedirs(TRAINER_PATH)
 
-def Images_And_Labels(path): # function to fetch the images and labels
+    def train_model(self):
+        """
+        Trains the face recognition model and saves it to a file.
+        """
+        print("Training faces. This may take a few seconds...")
+        faces, ids = self._get_images_and_labels()
+        if not faces:
+            print("No faces found for training. Please collect more samples.")
+            return
 
-    imagePaths = [os.path.join(path,f) for f in os.listdir(path)]     
-    faceSamples=[]
-    ids = []
+        self.recognizer.train(faces, np.array(ids))
+        self.recognizer.write(TRAINER_FILE)
+        print(f"Model trained and saved as {TRAINER_FILE}")
 
-    for imagePath in imagePaths: # to iterate particular image path
+    def _get_images_and_labels(self):
+        """
+        Fetches the images and corresponding labels from the samples directory.
 
-        gray_img = Image.open(imagePath).convert('L') # convert it to grayscale
-        img_arr = np.array(gray_img,'uint8') #creating an array
+        Returns:
+            tuple: A tuple containing a list of face samples and a list of corresponding IDs.
+        """
+        image_paths = [os.path.join(SAMPLES_PATH, f) for f in os.listdir(SAMPLES_PATH)]
+        face_samples = []
+        ids = []
 
-        id = int(os.path.split(imagePath)[-1].split(".")[1])
-        faces = detector.detectMultiScale(img_arr)
+        for image_path in image_paths:
+            try:
+                gray_img = Image.open(image_path).convert('L')
+                img_arr = np.array(gray_img, 'uint8')
 
-        for (x,y,w,h) in faces:
-            faceSamples.append(img_arr[y:y+h,x:x+w])
-            ids.append(id)
+                user_id = int(os.path.split(image_path)[-1].split(".")[1])
+                faces = self.detector.detectMultiScale(img_arr)
 
-    return faceSamples,ids
+                for (x, y, w, h) in faces:
+                    face_samples.append(img_arr[y:y+h, x:x+w])
+                    ids.append(user_id)
+            except Exception as e:
+                print(f"Error processing image {image_path}: {e}")
 
-print ("Training faces. It will take a few seconds. Wait ...")
+        return face_samples, ids
 
-faces,ids = Images_And_Labels(path)
-recognizer.train(faces, np.array(ids))
-
-recognizer.write('engine\\auth\\trainer\\trainer.yml')  # Save the trained model as trainer.yml
-
-print("Model trained, Now we can recognize your face.")
+if __name__ == '__main__':
+    try:
+        trainer = FaceTrainer()
+        trainer.train_model()
+    except FileNotFoundError as e:
+        print(e)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")

@@ -2,15 +2,12 @@
 Vishwakarma AI - Application Launcher
 © 2025 Vishwakarma Industries
 
-This script launches Vishwakarma AI with multiprocessing support
-for simultaneous voice assistant and hotword detection.
+This script launches the Vishwakarma AI application.
 """
-
-import multiprocessing
-import subprocess
+import sys
 
 def print_banner():
-    """Display startup banner"""
+    """Displays the startup banner."""
     banner = """
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
@@ -27,24 +24,35 @@ def print_banner():
     """
     print(banner)
 
-# To run Vishwakarma AI
-def startVishwakarma():
-        print("Starting Vishwakarma AI Core...")
+def start_vishwakarma():
+    """Starts the main application."""
+    print("Starting Vishwakarma AI Core...")
+    try:
         from main import start
         start()
+    except ImportError as e:
+        print(f"Error importing main module: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred during startup: {e}")
+        sys.exit(1)
 
-# Start application
+def main():
+    """The main entry point of the application."""
+    print_banner()
+
+    try:
+        start_vishwakarma()
+    except KeyboardInterrupt:
+        print("\n\nShutdown requested by user...")
+    except Exception as e:
+        print(f"\n\nAn unexpected error occurred: {e}")
+    finally:
+        print("\n╔══════════════════════════════════════════════════════════════╗")
+        print("║         Vishwakarma AI Shutdown Complete                    ║")
+        print("║         © 2025 Vishwakarma Industries                        ║")
+        print("╚══════════════════════════════════════════════════════════════╝\n")
+        sys.exit(0)
+
 if __name__ == '__main__':
-        print_banner()
-        
-        try:
-            startVishwakarma()
-        except KeyboardInterrupt:
-            print("\n\nShutdown requested by user...")
-        except Exception as e:
-            print(f"\n\nError occurred: {e}")
-        finally:
-            print("\n╔══════════════════════════════════════════════════════════════╗")
-            print("║         Vishwakarma AI Shutdown Complete                    ║")
-            print("║         © 2025 Vishwakarma Industries                        ║")
-            print("╚══════════════════════════════════════════════════════════════╝\n")
+    main()
